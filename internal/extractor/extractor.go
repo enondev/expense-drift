@@ -98,7 +98,7 @@ func New(httpClient *http.Client) *Extractor {
 	default:
 		e.provider = ProviderLocal
 		if e.baseURL == "" {
-			e.baseURL = "http://127.0.0"
+			e.baseURL = "http://127.0.0.1"
 		}
 		if e.model == "" {
 			e.model = "qwen2.5:7b-instruct"

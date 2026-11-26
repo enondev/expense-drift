@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"expensedrift/internal/collector"
@@ -47,7 +49,7 @@ func NewServer(cfg storage.Config, d1 *storage.D1Client, kv *storage.KVClient, f
 		kv:            kv,
 		fetcher:       fc,
 		extractor:     ext,
-		triggerSecret: cfg.CFAPIToken, // reuse API token as trigger secret if not set separately
+		triggerSecret: getEnv("TRIGGER_SECRET", cfg.CFAPIToken),
 		adminUser:     getEnv("ADMIN_USER", "admin"),
 		adminPassword: getEnv("ADMIN_PASSWORD", "change_me"),
 		logger:        slog.Default(),
@@ -95,9 +97,9 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	// Unauthenticated
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 
-	// Bearer-authenticated trigger endpoints
-	mux.HandleFunc("POST /api/v1/trigger/collect", s.requireBearer(s.handleTriggerCollect))
-	mux.HandleFunc("POST /api/v1/trigger/archive", s.requireBearer(s.handleTriggerArchive))
+	// Bearer-authenticated trigger endpoints (also accept Basic Auth for browser/htmx clients)
+	mux.HandleFunc("POST /api/v1/trigger/collect", s.rateLimit(10, time.Minute, s.requireBearerOrBasic(s.handleTriggerCollect)))
+	mux.HandleFunc("POST /api/v1/trigger/archive", s.rateLimit(5, time.Minute, s.requireBearerOrBasic(s.handleTriggerArchive)))
 
 	// Basic-authenticated API endpoints
 	mux.HandleFunc("GET /api/v1/vendors", s.requireBasicAuth(s.handleListVendors))
@@ -111,12 +113,67 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /diffs", s.requireUIAuth(s.handleDiffsUI))
 }
 
-// requireBearer wraps a handler with Bearer token auth using constant-time compare.
-func (s *Server) requireBearer(next http.HandlerFunc) http.HandlerFunc {
+// requireBearerOrBasic wraps a handler with Bearer token OR Basic Auth using constant-time compare.
+func (s *Server) requireBearerOrBasic(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Try Bearer token first (for API clients / curl)
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.triggerSecret)) != 1 {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		if token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.triggerSecret)) == 1 {
+			next(w, r)
+			return
+		}
+		// Fall back to Basic Auth (for browser/htmx clients after login)
+		s.requireBasicAuth(next)(w, r)
+	}
+}
+
+// rateLimit allows at most maxRequests per window per client IP.
+type rateLimiter struct {
+	mu      sync.Mutex
+	clients map[string][]time.Time
+	maxReq  int
+	window  time.Duration
+}
+
+func newRateLimiter(maxReq int, window time.Duration) *rateLimiter {
+	return &rateLimiter{
+		clients: make(map[string][]time.Time),
+		maxReq:  maxReq,
+		window:  window,
+	}
+}
+
+func (rl *rateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+	times := rl.clients[ip]
+	valid := times[:0]
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) >= rl.maxReq {
+		rl.clients[ip] = valid
+		return false
+	}
+	rl.clients[ip] = append(valid, now)
+	return true
+}
+
+// rateLimit wraps a handler with a per-IP rate limit.
+func (s *Server) rateLimit(maxReq int, window time.Duration, next http.HandlerFunc) http.HandlerFunc {
+	rl := newRateLimiter(maxReq, window)
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			ip = r.RemoteAddr
+		}
+		if !rl.allow(ip) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, `{"error":"rate limited"}`, http.StatusTooManyRequests)
 			return
 		}
 		next(w, r)
@@ -165,7 +222,6 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 // handleDashboard renders the control plane dashboard.
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
-		"TriggerSecret": s.triggerSecret,
 		"VendorCount":   0,
 		"DiffCount":     0,
 		"SnapshotCount": 0,
@@ -178,9 +234,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 // handleDiffsUI renders the diffs page.
 func (s *Server) handleDiffsUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{
-		"TriggerSecret": s.triggerSecret,
-	})
+	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{})
 }
 
 // handleListVendors lists monitored vendors.
@@ -239,6 +293,12 @@ func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
 	if req.RetentionDays == 0 {
 		req.RetentionDays = 30
 	}
+	if req.RetentionDays < 1 {
+		req.RetentionDays = 1
+	}
+	if req.RetentionDays > 3650 {
+		req.RetentionDays = 3650
+	}
 
 	archiver, err := storage.NewS3Archiver(s.cfg)
 	if err != nil {
@@ -287,7 +347,9 @@ func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
 	// Mark archived snapshots as archived_to_cold=1 after successful upload.
 	var snapshotIDs []interface{}
 	for _, row := range snapshotRows {
-		snapshotIDs = append(snapshotIDs, row["id"])
+		if id, ok := row["id"].(string); ok && id != "" {
+			snapshotIDs = append(snapshotIDs, id)
+		}
 	}
 	if len(snapshotIDs) > 0 {
 		placeholders := make([]string, len(snapshotIDs))

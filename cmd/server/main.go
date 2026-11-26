@@ -36,6 +36,13 @@ func main() {
 
 	cfg := storage.FromEnv()
 
+	// Validate required configuration.
+	if cfg.CFAccountID == "" || cfg.CFAPIToken == "" || cfg.CFD1DatabaseID == "" {
+		log.Error("missing required configuration",
+			"missing", []string{"CF_ACCOUNT_ID", "CF_API_TOKEN", "CF_D1_DATABASE_ID"})
+		os.Exit(1)
+	}
+
 	// Resolve bind address per SnapDeploy contract: 0.0.0.0:$PORT (default 8080).
 	listenAddr := resolveAddr(addr, port)
 

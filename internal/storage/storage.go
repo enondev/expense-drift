@@ -3,10 +3,8 @@ package storage
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -156,10 +154,6 @@ func (cw *countingWriter) Write(p []byte) (int, error) {
 	}
 	return n, err
 }
-
-// Ensure imports are used.
-var _ = http.StatusOK
-var _ = strings.TrimSpace
 
 // ObjectKeyForRetention builds a dated S3 object key for cold archives.
 func ObjectKeyForRetention(t time.Time) string {
