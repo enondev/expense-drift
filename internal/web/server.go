@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -82,7 +83,7 @@ func environGetenv(key string) string {
 	return processGetenv(key)
 }
 
-var processGetenv = func(key string) string { return "" }
+var processGetenv = func(key string) string { return os.Getenv(key) }
 
 // setProcessGetenv overrides processGetenv for tests.
 func setProcessGetenv(fn func(string) string) {
