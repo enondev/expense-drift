@@ -1,8 +1,10 @@
 package web
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -26,15 +28,74 @@ var templateFS embed.FS
 // parsedTemplates holds the parsed HTML templates.
 var parsedTemplates = template.Must(template.New("layout.html").Funcs(template.FuncMap{
 	"severityColor": severityColor,
+	"isAuthenticated": func() bool { return true },
 }).ParseFS(templateFS, "templates/*.html"))
+
+// session represents an authenticated user session.
+type session struct {
+	userID    string
+	expiresAt time.Time
+}
+
+// sessionStore holds active sessions in memory.
+type sessionStore struct {
+	mu   sync.RWMutex
+	data map[string]*session
+}
+
+const (
+	sessionCookieName = "expensedrift_session"
+	sessionTTL        = 24 * time.Hour
+	sessionIDLen      = 32
+)
+
+var sessions = &sessionStore{
+	data: make(map[string]*session),
+}
+
+func (s *sessionStore) get(id string) (*session, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sess, ok := s.data[id]
+	if !ok || sess.expiresAt.Before(time.Now()) {
+		return nil, false
+	}
+	return sess, true
+}
+
+func (s *sessionStore) set(userID string) string {
+	b := make([]byte, sessionIDLen)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	id := hex.EncodeToString(b)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[id] = &session{
+		userID:    userID,
+		expiresAt: time.Now().Add(sessionTTL),
+	}
+	for k, v := range s.data {
+		if v.expiresAt.Before(time.Now()) {
+			delete(s.data, k)
+		}
+	}
+	return id
+}
+
+func (s *sessionStore) delete(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, id)
+}
 
 // Server is the HTTP control plane.
 type Server struct {
-	cfg          storage.Config
-	d1           *storage.D1Client
-	kv           *storage.KVClient
-	fetcher      *fetcher.Fetcher
-	extractor    *extractor.Extractor
+	cfg           storage.Config
+	d1            *storage.D1Client
+	kv            *storage.KVClient
+	fetcher       *fetcher.Fetcher
+	extractor     *extractor.Extractor
 	triggerSecret string
 	adminUser     string
 	adminPassword string
@@ -81,13 +142,11 @@ func getEnv(key, def string) string {
 var getEnviron = func(key string) string { return environGetenv(key) }
 
 func environGetenv(key string) string {
-	// Avoid importing os directly for testability; replaced in tests.
 	return processGetenv(key)
 }
 
 var processGetenv = func(key string) string { return os.Getenv(key) }
 
-// setProcessGetenv overrides processGetenv for tests.
 func setProcessGetenv(fn func(string) string) {
 	processGetenv = fn
 }
@@ -96,34 +155,71 @@ func setProcessGetenv(fn func(string) string) {
 func (s *Server) Routes(mux *http.ServeMux) {
 	// Unauthenticated
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
+	mux.HandleFunc("GET /login", s.handleLogin)
+	mux.HandleFunc("POST /login", s.handleLogin)
+	mux.HandleFunc("GET /logout", s.handleLogout)
 
-	// Bearer-authenticated trigger endpoints (also accept Basic Auth for browser/htmx clients)
-	mux.HandleFunc("POST /api/v1/trigger/collect", s.rateLimit(10, time.Minute, s.requireBearerOrBasic(s.handleTriggerCollect)))
-	mux.HandleFunc("POST /api/v1/trigger/archive", s.rateLimit(5, time.Minute, s.requireBearerOrBasic(s.handleTriggerArchive)))
+	// Session-protected UI routes
+	mux.HandleFunc("GET /", s.requireSession(s.handleDashboard))
+	mux.HandleFunc("GET /diffs", s.requireSession(s.handleDiffsUI))
 
-	// Basic-authenticated API endpoints
-	mux.HandleFunc("GET /api/v1/vendors", s.requireBasicAuth(s.handleListVendors))
-	mux.HandleFunc("POST /api/v1/vendors", s.requireBasicAuth(s.handleUpsertVendor))
-	mux.HandleFunc("GET /api/v1/diffs", s.requireBasicAuth(s.handleListDiffs))
-	mux.HandleFunc("POST /api/v1/diffs/{diff_id}/ack", s.requireBasicAuth(s.handleAckDiff))
-	mux.HandleFunc("GET /api/v1/snapshots/{target_id}/latest", s.requireBasicAuth(s.handleLatestSnapshot))
-
-	// UI routes (Basic Auth or CF Access JWT)
-	mux.HandleFunc("GET /", s.requireUIAuth(s.handleDashboard))
-	mux.HandleFunc("GET /diffs", s.requireUIAuth(s.handleDiffsUI))
+	// Authenticated API endpoints (session cookie OR Bearer token OR Basic Auth)
+	mux.HandleFunc("POST /api/v1/trigger/collect", s.rateLimit(10, time.Minute, s.requireAuth(s.handleTriggerCollect)))
+	mux.HandleFunc("POST /api/v1/trigger/archive", s.rateLimit(5, time.Minute, s.requireAuth(s.handleTriggerArchive)))
+	mux.HandleFunc("GET /api/v1/vendors", s.requireAuth(s.handleListVendors))
+	mux.HandleFunc("POST /api/v1/vendors", s.requireAuth(s.handleUpsertVendor))
+	mux.HandleFunc("GET /api/v1/diffs", s.requireAuth(s.handleListDiffs))
+	mux.HandleFunc("POST /api/v1/diffs/{diff_id}/ack", s.requireAuth(s.handleAckDiff))
+	mux.HandleFunc("GET /api/v1/snapshots/{target_id}/latest", s.requireAuth(s.handleLatestSnapshot))
 }
 
-// requireBearerOrBasic wraps a handler with Bearer token OR Basic Auth using constant-time compare.
-func (s *Server) requireBearerOrBasic(next http.HandlerFunc) http.HandlerFunc {
+// requireSession ensures a valid session cookie exists; redirects to /login otherwise.
+func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Try Bearer token first (for API clients / curl)
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil || cookie.Value == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		if _, ok := sessions.get(cookie.Value); !ok {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// requireAuth accepts session cookie OR Bearer token OR Basic Auth.
+func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Session cookie (browser/htmx clients)
+		if cookie, err := r.Cookie(sessionCookieName); err == nil && cookie.Value != "" {
+			if _, ok := sessions.get(cookie.Value); ok {
+				next(w, r)
+				return
+			}
+		}
+		// Bearer token (API clients / curl)
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.triggerSecret)) == 1 {
 			next(w, r)
 			return
 		}
-		// Fall back to Basic Auth (for browser/htmx clients after login)
-		s.requireBasicAuth(next)(w, r)
+		// Basic Auth
+		user, pass, ok := r.BasicAuth()
+		if ok && subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(pass), []byte(s.adminPassword)) == 1 {
+			next(w, r)
+			return
+		}
+		// If it's an HTML request, redirect to login; otherwise 401
+		accept := r.Header.Get("Accept")
+		if strings.Contains(accept, "text/html") {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Basic realm="ExpenseDrift"`)
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	}
 }
 
@@ -180,33 +276,6 @@ func (s *Server) rateLimit(maxReq int, window time.Duration, next http.HandlerFu
 	}
 }
 
-// requireBasicAuth wraps a handler with Basic Auth using constant-time compare.
-func (s *Server) requireBasicAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, pass, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(pass), []byte(s.adminPassword)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="ExpenseDrift"`)
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-			return
-		}
-		next(w, r)
-	}
-}
-
-// requireUIAuth wraps a handler with UI auth: Basic Auth or Cloudflare Access JWT.
-func (s *Server) requireUIAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Cloudflare Access JWT assertion
-		if jwt := r.Header.Get("Cf-Access-Jwt-Assertion"); jwt != "" {
-			next(w, r)
-			return
-		}
-		// Fall back to Basic Auth
-		s.requireBasicAuth(next)(w, r)
-	}
-}
-
 // JSON helper.
 func jsonResponse(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -217,6 +286,73 @@ func jsonResponse(w http.ResponseWriter, status int, v any) {
 // handleHealthz returns service health.
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, 200, map[string]string{"status": "ok", "version": "0.1.0"})
+}
+
+// handleLogin renders the login form (GET) or processes login (POST).
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		user, pass, ok := r.BasicAuth()
+		if !ok {
+			user = r.PostFormValue("username")
+			pass = r.PostFormValue("password")
+		}
+		if ok && subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(pass), []byte(s.adminPassword)) == 1 {
+			sessionID := sessions.set(user)
+			if sessionID == "" {
+				http.Error(w, `{"error":"session creation failed"}`, http.StatusInternalServerError)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{
+				Name:     sessionCookieName,
+				Value:    sessionID,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+				MaxAge:   int(sessionTTL.Seconds()),
+			})
+			if r.Header.Get("Accept") == "application/json" || strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+				jsonResponse(w, 200, map[string]string{"status": "logged_in"})
+				return
+			}
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if r.Header.Get("Accept") == "application/json" || strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+			w.Header().Set("WWW-Authenticate", `Basic realm="ExpenseDrift"`)
+			http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
+			return
+		}
+		http.Redirect(w, r, "/login?error=1", http.StatusSeeOther)
+		return
+	}
+	// GET /login - show login form
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		if _, ok := sessions.get(cookie.Value); ok {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/html")
+	_ = parsedTemplates.ExecuteTemplate(w, "login", map[string]any{
+		"Error": r.URL.Query().Get("error") == "1",
+	})
+}
+
+// handleLogout clears the session cookie.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		sessions.delete(cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 // handleDashboard renders the control plane dashboard.
@@ -306,7 +442,6 @@ func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query snapshots older than retention_days that haven't been archived yet.
 	rows, err := s.d1.Query(storage.Statement{
 		SQL: `SELECT id, target_id, vendor_id, raw_content_hash, semantic_schema_hash,
 				 composite_audit_hash, prev_composite_hash, canonical_json, extractor_model, captured_at
@@ -344,7 +479,6 @@ func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark archived snapshots as archived_to_cold=1 after successful upload.
 	var snapshotIDs []interface{}
 	for _, row := range snapshotRows {
 		if id, ok := row["id"].(string); ok && id != "" {
