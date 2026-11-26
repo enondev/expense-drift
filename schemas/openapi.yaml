@@ -1,0 +1,422 @@
+openapi: 3.1.0
+info:
+  title: ExpenseDrift Control Plane & Intelligence API
+  version: 0.1.0
+  description: >
+    Authenticated control plane, burst-collection trigger, cold-storage archiver,
+    and historical shadow-inflation diff feed for ExpenseDrift.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://{app}.snapdeploy.app
+    description: SnapDeploy free-tier control plane
+    variables:
+      app:
+        default: expensedrift
+
+security:
+  - BearerAuth: []
+  - BasicAuth: []
+
+paths:
+  /healthz:
+    get:
+      summary: Unauthenticated liveness probe
+      security: []
+      responses:
+        "200":
+          description: Service is awake and healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 0.1.0
+
+  /api/v1/vendors:
+    get:
+      summary: List monitored SaaS vendors
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, paused]
+            default: active
+      responses:
+        "200":
+          description: Filtered list of vendors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vendors]
+                properties:
+                  vendors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Vendor"
+    post:
+      summary: Register or update a SaaS vendor and its watch targets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertVendorRequest"
+      responses:
+        "201":
+          description: Vendor and watch targets persisted to D1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+
+  /api/v1/diffs:
+    get:
+      summary: Query detected shadow-inflation and billing-rule diffs
+      description: >
+        Always filters using indexed columns (acknowledged, severity, created_at)
+        to respect Cloudflare D1 daily row-read budgets.
+      parameters:
+        - name: vendor_id
+          in: query
+          schema:
+            type: string
+        - name: min_severity
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 1
+        - name: acknowledged
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Ranked billing diffs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [diffs]
+                properties:
+                  diffs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BillingDiff"
+
+  /api/v1/diffs/{diff_id}/ack:
+    post:
+      summary: Acknowledge a billing diff alert
+      parameters:
+        - name: diff_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Diff marked as acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, acknowledged]
+                properties:
+                  id:
+                    type: string
+                  acknowledged:
+                    type: boolean
+                    example: true
+
+  /api/v1/snapshots/{target_id}/latest:
+    get:
+      summary: Retrieve latest canonical BillingRuleSet and 3-hash audit metadata
+      parameters:
+        - name: target_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Latest normalized snapshot for target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotRecord"
+        "404":
+          description: No snapshot recorded for target yet
+  /api/v1/trigger/collect:
+    post:
+      summary: Trigger an immediate burst collection run
+      description: >
+        Runs the tiered fetcher, 3-hash cascade, and LLM/deterministic extractor
+        for all active targets or a single specified vendor/target.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendor_id:
+                  type: string
+                  description: Optional vendor slug to scope the run.
+                target_id:
+                  type: string
+                  description: Optional specific target ID to scope the run.
+                force_semantic:
+                  type: boolean
+                  default: false
+                  description: Bypass raw_content_hash check and re-run semantic extraction.
+      responses:
+        "200":
+          description: Batch execution summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectRunSummary"
+
+  /api/v1/trigger/archive:
+    post:
+      summary: Stream old D1 snapshots to Backblaze B2 / Tigris cold storage
+      description: >
+        Streams snapshots older than retention_days via io.Pipe into compressed
+        cold storage, verifies upload byte count, and prunes archived rows from D1.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                retention_days:
+                  type: integer
+                  minimum: 1
+                  default: 30
+      responses:
+        "200":
+          description: Cold archival summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exported_rows, deleted_rows, object_key, bytes_written]
+                properties:
+                  exported_rows:
+                    type: integer
+                  deleted_rows:
+                    type: integer
+                  object_key:
+                    type: string
+                    example: snapshots/year=2026/month=11/2026-11-24T170000Z.jsonl.gz
+                  bytes_written:
+                    type: integer
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: High-entropy TRIGGER_SECRET verified in constant time.
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: Control plane UI & read-endpoint authentication (or Cloudflare Access JWT).
+
+  schemas:
+    BillingRuleSet:
+      $ref: "./billing_ruleset.schema.json"
+
+    Vendor:
+      type: object
+      required: [id, name, category, homepage_url, status, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        homepage_url:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [active, paused]
+        created_at:
+          type: string
+          format: date-time
+
+    WatchTargetInput:
+      type: object
+      required: [surface_type, url]
+      properties:
+        surface_type:
+          type: string
+          enum: [pricing, rate_limits, tos_dpa, sitemap, openapi]
+        url:
+          type: string
+          format: uri
+        extract_selector:
+          type: string
+        fetch_tier:
+          type: integer
+          enum: [1, 2, 3]
+          default: 1
+
+    UpsertVendorRequest:
+      type: object
+      required: [id, name, category, homepage_url, targets]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        name:
+          type: string
+        category:
+          type: string
+        homepage_url:
+          type: string
+          format: uri
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WatchTargetInput"
+
+    SnapshotRecord:
+      type: object
+      required:
+        - id
+        - target_id
+        - vendor_id
+        - raw_content_hash
+        - semantic_schema_hash
+        - composite_audit_hash
+        - extractor_model
+        - captured_at
+        - ruleset
+      properties:
+        id:
+          type: string
+        target_id:
+          type: string
+        vendor_id:
+          type: string
+        raw_content_hash:
+          type: string
+        semantic_schema_hash:
+          type: string
+        composite_audit_hash:
+          type: string
+        prev_composite_hash:
+          type: ["string", "null"]
+        extractor_model:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        ruleset:
+          $ref: "#/components/schemas/BillingRuleSet"
+
+    BillingDiff:
+      type: object
+      required:
+        - id
+        - vendor_id
+        - target_id
+        - drift_type
+        - severity
+        - summary
+        - diff_patch
+        - acknowledged
+        - created_at
+      properties:
+        id:
+          type: string
+        vendor_id:
+          type: string
+        target_id:
+          type: string
+        from_snapshot_id:
+          type: ["string", "null"]
+        to_snapshot_id:
+          type: string
+        drift_type:
+          type: string
+          enum:
+            - price_hike
+            - credit_multiplier
+            - seat_minimum
+            - quota_cut
+            - feature_gated
+            - tos_trap
+        severity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        summary:
+          type: string
+        diff_patch:
+          type: array
+          description: RFC 6902 JSON Patch operations describing exact field deltas.
+          items:
+            type: object
+            required: [op, path]
+            properties:
+              op:
+                type: string
+                enum: [add, remove, replace]
+              path:
+                type: string
+              value: {}
+        acknowledged:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CollectRunSummary:
+      type: object
+      required:
+        - targets_checked
+        - raw_unchanged
+        - semantic_unchanged
+        - diffs_detected
+        - errors
+        - duration_ms
+      properties:
+        targets_checked:
+          type: integer
+        raw_unchanged:
+          type: integer
+        semantic_unchanged:
+          type: integer
+        diffs_detected:
+          type: integer
+        errors:
+          type: integer
+        duration_ms:
+          type: integer

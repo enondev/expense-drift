@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org",
+  "$id": "https://expensedrift.local",
+  "title": "BillingRuleSet",
+  "description": "Canonical normalized representation of a SaaS vendor's pricing, metering, quota, and contract rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "vendor_id",
+    "surface_type",
+    "currency",
+    "tiers",
+    "rate_limits",
+    "contract_terms"
+  ],
+  "properties": {
+    "vendor_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Lowercase slug identifying the SaaS vendor (e.g., 'vercel', 'linear')."
+    },
+    "surface_type": {
+      "type": "string",
+      "enum": ["pricing", "rate_limits", "tos_dpa", "sitemap", "openapi"],
+      "description": "Type of monitored vendor artifact."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "default": "USD",
+      "description": "ISO-4217 uppercase currency code."
+    },
+    "tiers": {
+      "type": "array",
+      "description": "Pricing tiers sorted ascending by tier_name before hashing.",
+      "items": {
+        "$ref": "#/$defs/PricingTier"
+      }
+    },
+    "rate_limits": {
+      "type": "array",
+      "description": "API or usage quotas sorted ascending by metric_name before hashing.",
+      "items": {
+        "$ref": "#/$defs/QuotaRule"
+      }
+    },
+    "contract_terms": {
+      "$ref": "#/$defs/ContractTerms"
+    }
+  },
+  "$defs": {
+    "PricingTier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tier_name",
+        "base_price_monthly",
+        "annual_discount_pct",
+        "metering_unit",
+        "credit_multiplier",
+        "seat_minimum",
+        "included_quota",
+        "gated_features"
+      ],
+      "properties": {
+        "tier_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Lowercase trimmed plan name (e.g., 'free', 'pro', 'enterprise')."
+        },
+        "base_price_monthly": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Normalized monthly base price in currency units; null if custom/contact-sales."
+        },
+        "annual_discount_pct": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage discount when billed annually; null if not offered or unspecified."
+        },
+        "metering_unit": {
+          "type": "string",
+          "enum": ["seat", "credit", "1k_tokens", "gb", "request", "flat", "custom"],
+          "description": "Primary unit driving variable or recurring cost."
+        },
+        "credit_multiplier": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Multiplier applied to AI/premium actions (e.g., 1.5 for 1.5x credits); null if not applicable."
+        },
+        "seat_minimum": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1,
+          "description": "Minimum required seats or units to purchase this tier."
+        },
+        "included_quota": {
+          "type": "string",
+          "description": "Normalized summary of included allowance (e.g., '10000_requests_per_month', 'unlimited')."
+        },
+        "gated_features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Key enterprise/security features included in this tier, sorted ascending (e.g., ['audit_logs', 'sso'])."
+        }
+      }
+    },
+    "QuotaRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_name", "tier_name", "limit_value"],
+      "properties": {
+        "metric_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Lowercase snake_case metric identifier (e.g., 'api_requests_per_min')."
+        },
+        "tier_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "limit_value": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Normalized ceiling value (e.g., '60/min', '100000/month', 'unlimited')."
+        }
+      }
+    },
+    "ContractTerms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auto_renewal_notice_days",
+        "price_lock_clause",
+        "overage_behavior"
+      ],
+      "properties": {
+        "auto_renewal_notice_days": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Days before renewal deadline required to cancel without auto-renewing."
+        },
+        "price_lock_clause": {
+          "type": "boolean",
+          "description": "True if terms explicitly guarantee renewal pricing caps or rate locks."
+        },
+        "overage_behavior": {
+          "type": "string",
+          "enum": ["hard_cap", "auto_bill", "throttle", "unknown"],
+          "description": "Behavior when included quota is exceeded."
+        }
+      }
+    }
+  }
+}

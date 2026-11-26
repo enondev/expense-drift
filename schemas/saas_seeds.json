@@ -1,0 +1,165 @@
+{
+  "version": "2026-11-24",
+  "vendors": [
+    {
+      "id": "vercel",
+      "name": "Vercel",
+      "category": "cloud_hosting",
+      "homepage_url": "https://vercel.com",
+      "targets": [
+        {
+          "id": "vercel:pricing",
+          "surface_type": "pricing",
+          "url": "https://vercel.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "vercel:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://vercel.com/docs/quotas",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "category": "devtools",
+      "homepage_url": "https://linear.app",
+      "targets": [
+        {
+          "id": "linear:pricing",
+          "surface_type": "pricing",
+          "url": "https://linear.app/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "linear:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://linear.app/terms",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "category": "database_baas",
+      "homepage_url": "https://supabase.com",
+      "targets": [
+        {
+          "id": "supabase:pricing",
+          "surface_type": "pricing",
+          "url": "https://supabase.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "supabase:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://supabase.com/docs/guides/platform/limits",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI API",
+      "category": "ai_infra",
+      "homepage_url": "https://openai.com",
+      "targets": [
+        {
+          "id": "openai:pricing",
+          "surface_type": "pricing",
+          "url": "https://openai.com/api/pricing/",
+          "fetch_tier": 1
+        },
+        {
+          "id": "openai:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://platform.openai.com/docs/guides/rate-limits",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic Claude",
+      "category": "ai_infra",
+      "homepage_url": "https://claude.com",
+      "targets": [
+        {
+          "id": "anthropic:pricing",
+          "surface_type": "pricing",
+          "url": "https://www.anthropic.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "anthropic:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://docs.anthropic.com/en/api/rate-limits",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare Workers",
+      "category": "cloud_hosting",
+      "homepage_url": "https://developers.cloudflare.com",
+      "targets": [
+        {
+          "id": "cloudflare:pricing",
+          "surface_type": "pricing",
+          "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+          "fetch_tier": 1
+        },
+        {
+          "id": "cloudflare:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://developers.cloudflare.com/workers/platform/limits/",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "category": "devtools",
+      "homepage_url": "https://github.com",
+      "targets": [
+        {
+          "id": "github:pricing",
+          "surface_type": "pricing",
+          "url": "https://github.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "github:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "category": "fintech_billing",
+      "homepage_url": "https://stripe.com",
+      "targets": [
+        {
+          "id": "stripe:pricing",
+          "surface_type": "pricing",
+          "url": "https://stripe.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "stripe:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://stripe.com/legal/ssa",
+          "fetch_tier": 1
+        }
+      ]
+    }
+  ]
+}

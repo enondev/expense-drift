@@ -1,0 +1,84 @@
+name: Scheduled Collector
+
+on:
+  schedule:
+    # Run every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      vendor:
+        description: 'Optional vendor slug to scope the run'
+        required: false
+      target:
+        description: 'Optional target ID to scope the run'
+        required: false
+      force_semantic:
+        description: 'Bypass raw_content_hash check and re-run semantic extraction'
+        type: boolean
+        required: false
+      dry_run:
+        description: 'Do not write to D1/KV'
+        type: boolean
+        required: false
+
+env:
+  GO_VERSION: '1.23'
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - name: Install Wrangler (Cloudflare CLI)
+        run: |
+          npm install -g wrangler@latest
+
+      - name: Apply D1 schema migration
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          wrangler d1 execute expensedrift --remote --file=./migrations/schema.sql
+
+      - name: Seed vendors and targets (if manifest empty)
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          wrangler d1 execute expensedrift --remote --file=./migrations/seeds.sql
+
+      - name: Run headless collection
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_D1_DATABASE_ID: ${{ secrets.CF_D1_DATABASE_ID }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER || 'local' }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || 'http://127.0.0.1' }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL || 'qwen2.5:7b-instruct' }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY || '' }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.vendor }}" ]; then ARGS="$ARGS --vendor ${{ inputs.vendor }}"; fi
+          if [ -n "${{ inputs.target }}" ]; then ARGS="$ARGS --target ${{ inputs.target }}"; fi
+          if [ "${{ inputs.force_semantic }}" = "true" ]; then ARGS="$ARGS --force-semantic"; fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          go run ./cmd/collector $ARGS
+
+      - name: Upload collection summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collection-summary
+          path: |
+            collection-summary.json
+          retention-days: 7

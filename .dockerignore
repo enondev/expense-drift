@@ -1,0 +1,10 @@
+.git
+.github
+docs
+*.md
+!schemas/llm_extraction_prompt.md
+!schemas/billing_ruleset.schema.json
+.env*
+bin
+dist
+coverage.out

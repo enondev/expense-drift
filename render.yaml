@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: expensedrift-server
+    env: docker
+    rootDir: .
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /healthz
+    envVars:
+      - key: TRIGGER_SECRET
+        sync: false
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: LLM_PROVIDER
+        value: local
+      - key: LLM_BASE_URL
+        value: http://127.0.0.1
+      - key: LLM_MODEL
+        value: qwen2.5:7b-instruct

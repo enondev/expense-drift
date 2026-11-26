@@ -1,0 +1,83 @@
+{{define "content"}}
+<div class="mb-6 flex justify-between items-start gap-4">
+  <div>
+    <h1 class="text-2xl font-bold">Dashboard</h1>
+    <p class="text-gray-600">Shadow inflation monitoring control plane</p>
+  </div>
+  <div class="flex gap-2">
+    <button hx-post="/api/v1/trigger/collect"
+            hx-headers='{"Authorization": "Bearer {{.TriggerSecret}}"}'
+            hx-target="#collect-result"
+            hx-indicator="#collect-spinner"
+            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
+      Run Collection
+    </button>
+    <button hx-post="/api/v1/trigger/archive"
+            hx-headers='{"Authorization": "Bearer {{.TriggerSecret}}"}'
+            hx-target="#archive-result"
+            hx-indicator="#archive-spinner"
+            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50">
+      Archive Cold
+    </button>
+    <span id="collect-spinner" class="htmx-request hidden">…</span>
+    <span id="archive-spinner" class="htmx-request hidden">…</span>
+  </div>
+</div>
+
+<div id="collect-result" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-700 hidden"></div>
+<div id="archive-result" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-700 hidden"></div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="bg-white p-4 rounded border border-gray-200">
+    <h3 class="font-semibold mb-2">Vendors</h3>
+    <p class="text-2xl font-bold">{{.VendorCount}}</p>
+    <p class="text-gray-500 text-sm">Monitored SaaS vendors</p>
+  </div>
+  <div class="bg-white p-4 rounded border border-gray-200">
+    <h3 class="font-semibold mb-2">Diffs</h3>
+    <p class="text-2xl font-bold text-red-600">{{.DiffCount}}</p>
+    <p class="text-gray-500 text-sm">Detected shadow inflation</p>
+  </div>
+  <div class="bg-white p-4 rounded border border-gray-200">
+    <h3 class="font-semibold mb-2">Snapshots</h3>
+    <p class="text-2xl font-bold">{{.SnapshotCount}}</p>
+    <p class="text-gray-500 text-sm">Canonical rule sets captured</p>
+  </div>
+</div>
+
+<div class="mt-8">
+  <h3 class="font-semibold mb-4">Recent Diffs</h3>
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr class="border-b border-gray-200">
+          <th class="pb-2 text-gray-600 text-sm">Vendor</th>
+          <th class="pb-2 text-gray-600 text-sm">Type</th>
+          <th class="pb-2 text-gray-600 text-sm">Severity</th>
+          <th class="pb-2 text-gray-600 text-sm">Summary</th>
+          <th class="pb-2 text-gray-600 text-sm">Acknowledged</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .RecentDiffs}}
+        <tr class="border-b border-gray-100 hover:bg-gray-50">
+          <td class="py-2">{{.VendorID}}</td>
+          <td class="py-2">{{.DriftType}}</td>
+          <td class="py-2"><span class="px-2 py-1 rounded text-xs font-bold {{severityColor .Severity}}">{{.Severity}}</span></td>
+          <td class="py-2">{{.Summary}}</td>
+          <td class="py-2">{{if .Acknowledged}}Yes{{else}}No{{end}}</td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="5" class="py-4 text-gray-500 text-center">No diffs detected yet.</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+
+{{define "severityColor"}}
+{{if eq . 5}}bg-red-100 text-red-700{{else if eq . 4}}bg-orange-100 text-orange-700{{else if eq . 3}}bg-yellow-100 text-yellow-700{{else}}bg-gray-100 text-gray-700{{end}}
+{{end}}

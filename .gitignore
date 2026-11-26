@@ -1,0 +1,6 @@
+.env
+*.tar
+/bin/
+/dist/
+coverage.out
+.DS_Store
