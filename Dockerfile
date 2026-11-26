@@ -12,9 +12,9 @@ RUN go mod download
 # Copy application source, migrations, and embedded schemas/templates
 COPY . .
 
-# Target SnapDeploy's ARM64 architecture with stripped debug symbols
+# Target architecture auto-injected by Docker buildx (--platform linux/amd64 or linux/arm64)
 ARG TARGETOS=linux
-ARG TARGETARCH=arm64
+ARG TARGETARCH
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o /out/expensedrift-server ./cmd/server && \

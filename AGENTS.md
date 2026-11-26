@@ -12,7 +12,7 @@ It compiles into two binaries from one Go module:
    - NEVER buffer large HTTP responses or cold-storage exports in memory; bound `io.LimitReader` to 5 MB per page and stream cold archives via `io.Pipe`.
    - Keep `maxConcurrency <= 5` in `internal/fetcher`.
 2. **Architecture & Containerization:**
-   - Docker builds MUST use a **multi-stage build** (`golang:1.23-alpine` builder -> `gcr.io/distroless/static-debian12:nonroot` runtime) targeting `linux/arm64` with `CGO_ENABLED=0` and `-ldflags="-s -w"` to keep the final image under 25 MB.
+   - Docker builds MUST use a **multi-stage build** (`golang:1.26-alpine` builder -> `gcr.io/distroless/static-debian12:nonroot` runtime) targeting `linux/amd64` (Render) or `linux/arm64` (SnapDeploy) with `CGO_ENABLED=0` and `-ldflags="-s -w"` to keep the final image under 25 MB.
    - Runtime container MUST run as `nonroot`, include Mozilla CA certificates for outbound TLS (scraping, D1, B2/Tigris), and bind to `0.0.0.0:$PORT` (default `8080`).
 3. **Zero Paid SaaS Lock-in:**
    - Hot DB is Cloudflare D1 (SQLite dialect). Every `SELECT` query MUST filter on an indexed column to protect the 5M daily row-read cap.
