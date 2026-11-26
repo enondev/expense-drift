@@ -36,6 +36,8 @@ func main() {
 
 	cfg := storage.FromEnv()
 
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
 	// Validate required configuration.
 	if cfg.CFAccountID == "" || cfg.CFAPIToken == "" || cfg.CFD1DatabaseID == "" {
 		log.Error("missing required configuration",
@@ -45,8 +47,6 @@ func main() {
 
 	// Resolve bind address per SnapDeploy contract: 0.0.0.0:$PORT (default 8080).
 	listenAddr := resolveAddr(addr, port)
-
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	d1 := storage.NewD1Client(cfg)
 	kv := storage.NewKVClient(cfg)
