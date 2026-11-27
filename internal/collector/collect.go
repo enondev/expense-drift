@@ -32,6 +32,8 @@ type CollectionSummary struct {
 // Run executes the collection pipeline for all active watch targets (or a scoped
 // subset when vendorID/targetID is set). Returns a summary of results.
 func Run(ctx context.Context, log *slog.Logger, d1 *storage.D1Client, kv *storage.KVClient, fc *fetcher.Fetcher, ext *extractor.Extractor, vendorID, targetID string, forceSemantic, dryRun bool) (*CollectionSummary, error) {
+	start := time.Now()
+
 	// Read manifest:v1 from KV (single read at startup).
 	manifest, err := kv.ReadManifest()
 	if err != nil {
@@ -87,7 +89,7 @@ func Run(ctx context.Context, log *slog.Logger, d1 *storage.D1Client, kv *storag
 		}
 	}
 
-	summary.DurationMS = time.Since(time.Now()).Milliseconds() // placeholder, will be set by caller
+	summary.DurationMS = time.Since(start).Milliseconds()
 
 	log.Info("collection run complete",
 		"targets_checked", summary.TargetsChecked,

@@ -130,9 +130,9 @@ func runSeedOnly(ctx context.Context, log *slog.Logger, d1 *storage.D1Client, kv
 				targetID = v.ID + ":" + strings.ToLower(strings.ReplaceAll(t.SurfaceType, "_", "-"))
 			}
 			stmts = append(stmts, storage.Statement{
-				SQL: `INSERT INTO watch_targets (id, vendor_id, surface_type, url, extract_selector, fetch_tier)
-					  VALUES (?, ?, ?, ?, ?, ?)
-					  ON CONFLICT(id) DO UPDATE SET vendor_id=excluded.vendor_id, surface_type=excluded.surface_type, url=excluded.url, extract_selector=excluded.extract_selector, fetch_tier=excluded.fetch_tier`,
+				SQL: `INSERT INTO watch_targets (id, vendor_id, surface_type, url, extract_selector, fetch_tier, next_check_at)
+					  VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+					  ON CONFLICT(id) DO UPDATE SET vendor_id=excluded.vendor_id, surface_type=excluded.surface_type, url=excluded.url, extract_selector=excluded.extract_selector, fetch_tier=excluded.fetch_tier, next_check_at=excluded.next_check_at`,
 				Params: []interface{}{targetID, v.ID, t.SurfaceType, t.URL, t.ExtractSelector, t.FetchTier},
 			})
 		}

@@ -34,9 +34,9 @@ func NewD1ClientWithURL(cfg Config, baseURL string) *D1Client {
 }
 
 // d1QueryRequest is the Cloudflare D1 batch query request body.
-// Cloudflare D1 expects {"batch": [...]}, not {"statements": [...]}
+// Cloudflare D1 expects {"statements": [...]}, not {"batch": [...]}
 type d1QueryRequest struct {
-	Batch []Statement `json:"batch"`
+	Statements []Statement `json:"statements"`
 }
 
 // Query executes a batch of SQL statements against the D1 database in a single
@@ -46,7 +46,7 @@ func (c *D1Client) Query(statements ...Statement) ([]Result, error) {
 		return nil, err
 	}
 
-	body, err := json.Marshal(d1QueryRequest{Batch: statements})
+	body, err := json.Marshal(d1QueryRequest{Statements: statements})
 	if err != nil {
 		return nil, fmt.Errorf("marshal d1 statements: %w", err)
 	}
