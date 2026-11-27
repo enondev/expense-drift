@@ -97,7 +97,13 @@ func TestD1ClientQuerySuccess(t *testing.T) {
 	if captured.contentType != "application/json" {
 		t.Fatalf("expected application/json, got %q", captured.contentType)
 	}
-	// Verify batch statements were sent.
+	// Verify batch statements were sent using the "statements" key (not "batch").
+	if !strings.Contains(captured.body, `"statements"`) {
+		t.Fatalf("expected \"statements\" key in request body, got %q", captured.body)
+	}
+	if strings.Contains(captured.body, `"batch"`) {
+		t.Fatalf("request body must not contain \"batch\" key, got %q", captured.body)
+	}
 	if !strings.Contains(captured.body, "SELECT * FROM snapshots WHERE target_id = 'x'") {
 		t.Fatalf("expected SQL in body, got %q", captured.body)
 	}
