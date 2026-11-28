@@ -1,4 +1,3 @@
-{{define "targets"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,7 +32,7 @@
       </div>
     </div>
 
-    <div class="bg-white p-6 rounded shadow border border-gray-200" hx-get="/api/v1/targets" hx-trigger="load">
+    <div class="bg-white p-6 rounded shadow border border-gray-200">
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="border-b border-gray-200">
@@ -45,12 +44,46 @@
             <th class="pb-2 text-gray-600 text-sm">Next Check</th>
           </tr>
         </thead>
-        <tbody id="targets-table-body">
-        </tbody>
+        <tbody id="targets-table-body"></tbody>
       </table>
       <p id="targets-empty" class="py-4 text-gray-500 text-center hidden">No targets found.</p>
     </div>
   </div>
+
+  <script>
+    async function loadTargets() {
+      try {
+        const res = await fetch("/api/v1/targets");
+        const data = await res.json();
+        const targets = data.targets || [];
+        const tbody = document.getElementById("targets-table-body");
+        const empty = document.getElementById("targets-empty");
+
+        if (targets.length === 0) {
+          empty.classList.remove("hidden");
+          tbody.innerHTML = "";
+          return;
+        }
+
+        empty.classList.add("hidden");
+        tbody.innerHTML = targets.map(t => `
+          <tr class="border-b border-gray-100 hover:bg-gray-50">
+            <td class="py-2">${t.id}</td>
+            <td class="py-2">${t.vendor_id}</td>
+            <td class="py-2">${t.surface_type}</td>
+            <td class="py-2"><a href="${t.url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${t.url}</a></td>
+            <td class="py-2">${t.fetch_tier}</td>
+            <td class="py-2">${t.next_check_at}</td>
+          </tr>
+        `).join("");
+      } catch (e) {
+        console.error("Failed to load targets:", e);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadTargets();
+    });
+  </script>
 </body>
 </html>
-{{end}}

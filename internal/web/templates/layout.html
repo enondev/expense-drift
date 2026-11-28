@@ -17,13 +17,13 @@
       <div class="flex gap-4">
         <a href="/" class="text-blue-600 hover:text-blue-800">Dashboard</a>
         <a href="/diffs" class="text-blue-600 hover:text-blue-800">Diffs</a>
+        <a href="/vendors" class="text-blue-600 hover:text-blue-800">Vendors</a>
+        <a href="/targets" class="text-blue-600 hover:text-blue-800">Targets</a>
         <a href="/logout" class="px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">Logout</a>
       </div>
     </div>
   </nav>
 
-  <div class="max-w-7xl mx-auto py-6 px-4">
-    {{template "content" .}}
-  </div>
+  <div id="content" class="max-w-7xl mx-auto py-6 px-4"></div>
 </body>
 </html>
