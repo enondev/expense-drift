@@ -54,24 +54,13 @@
           <th class="pb-2 text-gray-600 text-sm">Severity</th>
           <th class="pb-2 text-gray-600 text-sm">Summary</th>
           <th class="pb-2 text-gray-600 text-sm">Acknowledged</th>
+          <th class="pb-2 text-gray-600 text-sm">Action</th>
         </tr>
       </thead>
-      <tbody>
-        {{range .RecentDiffs}}
-        <tr class="border-b border-gray-100 hover:bg-gray-50">
-          <td class="py-2">{{.VendorID}}</td>
-          <td class="py-2">{{.DriftType}}</td>
-          <td class="py-2"><span class="px-2 py-1 rounded text-xs font-bold {{severityColor .Severity}}">{{.Severity}}</span></td>
-          <td class="py-2">{{.Summary}}</td>
-          <td class="py-2">{{if .Acknowledged}}Yes{{else}}No{{end}}</td>
-        </tr>
-        {{else}}
-        <tr>
-          <td colspan="5" class="py-4 text-gray-500 text-center">No diffs detected yet.</td>
-        </tr>
-        {{end}}
+      <tbody id="diffs-table-body" hx-get="/api/v1/diffs/fragment" hx-trigger="load">
       </tbody>
     </table>
+    <p id="diffs-empty" class="py-4 text-gray-500 text-center hidden">No diffs detected yet.</p>
   </div>
 </div>
 {{end}}

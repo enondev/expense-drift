@@ -16,7 +16,7 @@
         {
           "id": "vercel:rate-limits",
           "surface_type": "rate_limits",
-          "url": "https://vercel.com/docs/quotas",
+          "url": "https://vercel.com/docs/limits",
           "fetch_tier": 1
         }
       ]
@@ -56,7 +56,7 @@
         {
           "id": "supabase:rate-limits",
           "surface_type": "rate_limits",
-          "url": "https://supabase.com/docs/guides/platform/limits",
+          "url": "https://supabase.com/docs/guides/auth/rate-limits",
           "fetch_tier": 1
         }
       ]
@@ -76,7 +76,7 @@
         {
           "id": "openai:rate-limits",
           "surface_type": "rate_limits",
-          "url": "https://platform.openai.com/docs/guides/rate-limits",
+          "url": "https://developers.openai.com/api/docs/guides/rate-limits",
           "fetch_tier": 1
         }
       ]
@@ -90,7 +90,7 @@
         {
           "id": "anthropic:pricing",
           "surface_type": "pricing",
-          "url": "https://www.anthropic.com/pricing",
+          "url": "https://claude.com/pricing",
           "fetch_tier": 1
         },
         {
@@ -136,7 +136,7 @@
         {
           "id": "github:rate-limits",
           "surface_type": "rate_limits",
-          "url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting",
+          "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
           "fetch_tier": 1
         }
       ]
@@ -157,6 +157,222 @@
           "id": "stripe:tos-dpa",
           "surface_type": "tos_dpa",
           "url": "https://stripe.com/legal/ssa",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "digitalocean",
+      "name": "Digital Ocean",
+      "category": "cloud_hosting",
+      "homepage_url": "https://www.digitalocean.com",
+      "targets": [
+        {
+          "id": "digitalocean:pricing",
+          "surface_type": "pricing",
+          "url": "https://www.digitalocean.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "digitalocean:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://docs.digitalocean.com/platform/resource-limits/",
+          "fetch_tier": 1
+        },
+        {
+          "id": "digitalocean:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://www.digitalocean.com/legal/terms-of-service-agreement",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "render",
+      "name": "Render",
+      "category": "cloud_hosting",
+      "homepage_url": "https://render.com",
+      "targets": [
+        {
+          "id": "render:pricing",
+          "surface_type": "pricing",
+          "url": "https://render.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "render:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://api-docs.render.com/reference/rate-limiting",
+          "fetch_tier": 1
+        },
+        {
+          "id": "render:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://render.com/terms",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "snapdeploy",
+      "name": "SnapDeploy",
+      "category": "cloud_hosting",
+      "homepage_url": "https://snapdeploy.dev",
+      "targets": [
+        {
+          "id": "snapdeploy:pricing",
+          "surface_type": "pricing",
+          "url": "https://snapdeploy.dev/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "snapdeploy:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://snapdeploy.dev/api",
+          "fetch_tier": 1
+        },
+        {
+          "id": "snapdeploy:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://snapdeploy.dev/terms",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "kilocode",
+      "name": "KiloCode",
+      "category": "ai_infra",
+      "homepage_url": "https://kilo.ai",
+      "targets": [
+        {
+          "id": "kilocode:pricing",
+          "surface_type": "pricing",
+          "url": "https://kilo.ai/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "kilocode:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://kilo.ai/docs/getting-started/rate-limits-and-costs",
+          "fetch_tier": 1
+        },
+        {
+          "id": "kilocode:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://kilo.ai/terms",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "nvidia-nim",
+      "name": "NVIDIA NIM",
+      "category": "ai_infra",
+      "homepage_url": "https://build.nvidia.com",
+      "targets": [
+        {
+          "id": "nvidia-nim:pricing",
+          "surface_type": "pricing",
+          "url": "https://build.nvidia.com/",
+          "fetch_tier": 1
+        },
+        {
+          "id": "nvidia-nim:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://build.nvidia.com/",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "category": "ai_infra",
+      "homepage_url": "https://openrouter.ai",
+      "targets": [
+        {
+          "id": "openrouter:pricing",
+          "surface_type": "pricing",
+          "url": "https://openrouter.ai/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "openrouter:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://openrouter.ai/docs/api_reference/limits",
+          "fetch_tier": 1
+        },
+        {
+          "id": "openrouter:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://openrouter.ai/terms",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "google-workspace",
+      "name": "Google Workspace",
+      "category": "saas_productivity",
+      "homepage_url": "https://workspace.google.com",
+      "targets": [
+        {
+          "id": "google-workspace:pricing",
+          "surface_type": "pricing",
+          "url": "https://workspace.google.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "google-workspace:rate-limits",
+          "surface_type": "rate_limits",
+          "url": "https://developers.google.com/workspace/guides/quota-overview",
+          "fetch_tier": 1
+        },
+        {
+          "id": "google-workspace:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://workspace.google.com/terms/service-terms/",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "tailscale",
+      "name": "Tailscale",
+      "category": "networking",
+      "homepage_url": "https://tailscale.com",
+      "targets": [
+        {
+          "id": "tailscale:pricing",
+          "surface_type": "pricing",
+          "url": "https://tailscale.com/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "tailscale:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://tailscale.com/terms",
+          "fetch_tier": 1
+        }
+      ]
+    },
+    {
+      "id": "belmo",
+      "name": "Belmo",
+      "category": "cloud_hosting",
+      "homepage_url": "https://belmo.io",
+      "targets": [
+        {
+          "id": "belmo:pricing",
+          "surface_type": "pricing",
+          "url": "https://belmo.io/pricing",
+          "fetch_tier": 1
+        },
+        {
+          "id": "belmo:tos-dpa",
+          "surface_type": "tos_dpa",
+          "url": "https://belmo.io/terms",
           "fetch_tier": 1
         }
       ]
