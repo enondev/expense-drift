@@ -1,0 +1,28 @@
+{{define "diffs.html"}}
+{{if .Diffs}}
+{{range .Diffs}}
+<tr class="border-b border-gray-100 hover:bg-gray-50" id="diff-{{.id}}">
+  <td class="py-2">{{.vendor_name}}</td>
+  <td class="py-2">{{.drift_type}}</td>
+  <td class="py-2"><span class="px-2 py-1 rounded text-xs font-bold {{severityColor .severity}}">{{.severity}}</span></td>
+  <td class="py-2">{{.summary}}</td>
+  <td class="py-2">{{if .acknowledged}}<span class="text-green-600 font-semibold">Acked</span>{{else}}<span class="text-gray-400">Pending</span>{{end}}</td>
+  <td class="py-2">
+    {{if not .acknowledged}}
+    <button hx-post="/api/v1/diffs/{{.id}}/ack"
+            hx-target="#diff-{{.id}}"
+            hx-swap="outerHTML"
+            class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">
+      Ack
+    </button>
+    {{else}}
+    <span class="text-xs text-green-600">✓</span>
+    {{end}}
+  </td>
+</tr>
+{{else}}
+<tr>
+  <td colspan="6" class="py-4 text-gray-500 text-center">No diffs detected yet.</td>
+</tr>
+{{end}}
+{{end}}

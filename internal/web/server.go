@@ -28,7 +28,6 @@ var templateFS embed.FS
 // parsedTemplates holds the parsed HTML templates.
 var parsedTemplates = template.Must(template.New("layout.html").Funcs(template.FuncMap{
 	"severityColor": severityColor,
-	"isAuthenticated": func() bool { return true },
 }).ParseFS(templateFS, "templates/*.html"))
 
 // session represents an authenticated user session.
@@ -118,8 +117,18 @@ func NewServer(cfg storage.Config, d1 *storage.D1Client, kv *storage.KVClient, f
 }
 
 // severityColor returns a Tailwind color class for a diff severity.
-func severityColor(sev int) string {
-	switch sev {
+// Accepts interface{} to handle both int and float64 (D1 returns numbers as float64).
+func severityColor(sev interface{}) string {
+	var s int
+	switch v := sev.(type) {
+	case int:
+		s = v
+	case float64:
+		s = int(v)
+	default:
+		return "bg-gray-100 text-gray-700"
+	}
+	switch s {
 	case 5:
 		return "bg-red-100 text-red-700"
 	case 4:
@@ -162,6 +171,8 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	// Session-protected UI routes
 	mux.HandleFunc("GET /", s.requireSession(s.handleDashboard))
 	mux.HandleFunc("GET /diffs", s.requireSession(s.handleDiffsUI))
+	mux.HandleFunc("GET /vendors", s.requireSession(s.handleVendorsUI))
+	mux.HandleFunc("GET /targets", s.requireSession(s.handleTargetsUI))
 
 	// Authenticated API endpoints (session cookie OR Bearer token OR Basic Auth)
 	mux.HandleFunc("POST /api/v1/trigger/collect", s.rateLimit(10, time.Minute, s.requireAuth(s.handleTriggerCollect)))
@@ -170,6 +181,8 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/vendors", s.requireAuth(s.handleUpsertVendor))
 	mux.HandleFunc("GET /api/v1/targets", s.requireAuth(s.handleListTargets))
 	mux.HandleFunc("GET /api/v1/diffs", s.requireAuth(s.handleListDiffs))
+	mux.HandleFunc("GET /api/v1/metrics", s.requireAuth(s.handleListMetrics))
+	mux.HandleFunc("GET /api/v1/diffs/fragment", s.requireAuth(s.handleListDiffsFragment))
 	mux.HandleFunc("POST /api/v1/diffs/{diff_id}/ack", s.requireAuth(s.handleAckDiff))
 	mux.HandleFunc("GET /api/v1/snapshots/{target_id}/latest", s.requireAuth(s.handleLatestSnapshot))
 }
@@ -364,6 +377,56 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"SnapshotCount": 0,
 		"RecentDiffs":   []any{},
 	}
+
+	// Vendor count
+	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM vendors`}); err == nil {
+		for _, r := range rows {
+			for _, row := range r.Results {
+				if cnt, ok := row["cnt"].(float64); ok {
+					data["VendorCount"] = int(cnt)
+				}
+			}
+		}
+	}
+
+	// Diff count
+	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM billing_diffs`}); err == nil {
+		for _, r := range rows {
+			for _, row := range r.Results {
+				if cnt, ok := row["cnt"].(float64); ok {
+					data["DiffCount"] = int(cnt)
+				}
+			}
+		}
+	}
+
+	// Snapshot count
+	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM snapshots`}); err == nil {
+		for _, r := range rows {
+			for _, row := range r.Results {
+				if cnt, ok := row["cnt"].(float64); ok {
+					data["SnapshotCount"] = int(cnt)
+				}
+			}
+		}
+	}
+
+	// Recent diffs (latest 5)
+	if rows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT bd.id, v.name as vendor_name, bd.drift_type, bd.severity, bd.summary,
+				  bd.acknowledged, bd.created_at
+			  FROM billing_diffs bd
+			  JOIN vendors v ON bd.vendor_id = v.id
+			  ORDER BY bd.created_at DESC
+			  LIMIT 5`,
+	}); err == nil {
+		var recent []map[string]interface{}
+		for _, r := range rows {
+			recent = append(recent, r.Results...)
+		}
+		data["RecentDiffs"] = recent
+	}
+
 	w.Header().Set("Content-Type", "text/html")
 	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", data)
 }
@@ -425,17 +488,163 @@ func (s *Server) handleUpsertVendor(w http.ResponseWriter, r *http.Request) {
 
 // handleListDiffs lists billing diffs.
 func (s *Server) handleListDiffs(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, 200, map[string]any{"diffs": []any{}})
+	rows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT bd.id, v.name as vendor_name, bd.drift_type, bd.severity, bd.summary,
+				  bd.acknowledged, bd.created_at
+			  FROM billing_diffs bd
+			  JOIN vendors v ON bd.vendor_id = v.id
+			  ORDER BY bd.created_at DESC
+			  LIMIT 50`,
+	})
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	var diffs []map[string]interface{}
+	for _, r := range rows {
+		diffs = append(diffs, r.Results...)
+	}
+	jsonResponse(w, 200, map[string]any{"diffs": diffs})
 }
 
 // handleAckDiff acknowledges a billing diff.
 func (s *Server) handleAckDiff(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, 200, map[string]any{"id": r.PathValue("diff_id"), "acknowledged": true})
+	diffID := r.PathValue("diff_id")
+	if diffID == "" {
+		jsonResponse(w, 400, map[string]string{"error": "diff_id is required"})
+		return
+	}
+	_, err := s.d1.Query(storage.Statement{
+		SQL: `UPDATE billing_diffs SET acknowledged = 1 WHERE id = ?`,
+		Params: []interface{}{diffID},
+	})
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	// Check if any row was affected by trying to read it back
+	checkRows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT acknowledged FROM billing_diffs WHERE id = ?`,
+		Params: []interface{}{diffID},
+	})
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	var acknowledged int
+	found := false
+	for _, r := range checkRows {
+		for _, row := range r.Results {
+			if v, ok := row["acknowledged"].(float64); ok {
+				acknowledged = int(v)
+				found = true
+			}
+		}
+	}
+	if !found {
+		jsonResponse(w, 404, map[string]string{"error": "diff not found"})
+		return
+	}
+	jsonResponse(w, 200, map[string]any{"id": diffID, "acknowledged": acknowledged == 1})
 }
 
 // handleLatestSnapshot returns the latest snapshot for a target.
 func (s *Server) handleLatestSnapshot(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, 404, map[string]string{"error": "no snapshot recorded for target yet"})
+	targetID := r.PathValue("target_id")
+	if targetID == "" {
+		jsonResponse(w, 400, map[string]string{"error": "target_id is required"})
+		return
+	}
+	rows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT s.id, s.target_id, s.vendor_id, s.raw_content_hash, s.semantic_schema_hash,
+				  s.composite_audit_hash, s.captured_at, s.extractor_model
+			  FROM snapshots s
+			  WHERE s.target_id = ?
+			  ORDER BY s.captured_at DESC
+			  LIMIT 1`,
+		Params: []interface{}{targetID},
+	})
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	var snapshots []map[string]interface{}
+	for _, r := range rows {
+		snapshots = append(snapshots, r.Results...)
+	}
+	if len(snapshots) == 0 {
+		jsonResponse(w, 404, map[string]string{"error": "no snapshot recorded for target yet"})
+		return
+	}
+	jsonResponse(w, 200, snapshots[0])
+}
+
+// handleListMetrics returns counts for the dashboard metric cards.
+func (s *Server) handleListMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics := map[string]interface{}{}
+
+	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM vendors`}); err == nil {
+		for _, r := range rows {
+			for _, row := range r.Results {
+				if cnt, ok := row["cnt"].(float64); ok {
+					metrics["vendor_count"] = int(cnt)
+				}
+			}
+		}
+	}
+	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM billing_diffs`}); err == nil {
+		for _, r := range rows {
+			for _, row := range r.Results {
+				if cnt, ok := row["cnt"].(float64); ok {
+					metrics["diff_count"] = int(cnt)
+				}
+			}
+		}
+	}
+	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM snapshots`}); err == nil {
+		for _, r := range rows {
+			for _, row := range r.Results {
+				if cnt, ok := row["cnt"].(float64); ok {
+					metrics["snapshot_count"] = int(cnt)
+				}
+			}
+		}
+	}
+	jsonResponse(w, 200, metrics)
+}
+
+// handleListDiffsFragment returns an HTML fragment of diff table rows for HTMX.
+func (s *Server) handleListDiffsFragment(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT bd.id, v.name as vendor_name, bd.drift_type, bd.severity, bd.summary,
+				  bd.acknowledged, bd.created_at
+			  FROM billing_diffs bd
+			  JOIN vendors v ON bd.vendor_id = v.id
+			  ORDER BY bd.created_at DESC
+			  LIMIT 50`,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var diffs []map[string]interface{}
+	for _, r := range rows {
+		diffs = append(diffs, r.Results...)
+	}
+	w.Header().Set("Content-Type", "text/html")
+	_ = parsedTemplates.ExecuteTemplate(w, "diffs.html", map[string]any{"Diffs": diffs})
+}
+
+// handleVendorsUI renders the vendors listing page.
+func (s *Server) handleVendorsUI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{"Page": "vendors"})
+}
+
+// handleTargetsUI renders the targets listing page.
+func (s *Server) handleTargetsUI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{"Page": "targets"})
 }
 
 // handleTriggerCollect triggers a collection run.
