@@ -51,9 +51,12 @@
   </div>
 
   <script>
+    window.EXPENSEDRIFT_API_BASE = window.EXPENSEDRIFT_API_BASE || "";
+    const API_BASE = window.EXPENSEDRIFT_API_BASE;
+
     async function loadTargets() {
       try {
-        const res = await fetch("/api/v1/targets");
+        const res = await fetch(`${API_BASE}/api/v1/targets`);
         const data = await res.json();
         const targets = data.targets || [];
         const tbody = document.getElementById("targets-table-body");

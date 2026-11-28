@@ -50,9 +50,12 @@
   </div>
 
   <script>
+    window.EXPENSEDRIFT_API_BASE = window.EXPENSEDRIFT_API_BASE || "";
+    const API_BASE = window.EXPENSEDRIFT_API_BASE;
+
     async function loadVendors() {
       try {
-        const res = await fetch("/api/v1/vendors");
+        const res = await fetch(`${API_BASE}/api/v1/vendors`);
         const data = await res.json();
         const vendors = data.vendors || [];
         const tbody = document.getElementById("vendors-table-body");
