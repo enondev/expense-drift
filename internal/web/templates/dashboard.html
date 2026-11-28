@@ -91,18 +91,27 @@
   </div>
 
   <script>
+    // Configure API base URL for production deployment.
+    // Example: window.EXPENSEDRIFT_API_BASE = "https://your-server.onrender.com";
+    // Leave unset for local dev (relative fetch to same origin).
+    window.EXPENSEDRIFT_API_BASE = window.EXPENSEDRIFT_API_BASE || "";
+
     function severityColor(sev) {
       switch (sev) {
         case 5: return "bg-red-100 text-red-700";
         case 4: return "bg-orange-100 text-orange-700";
         case 3: return "bg-yellow-100 text-yellow-700";
-        default: return "bg-gray-100 text-gray-700";
-      }
+      default: return "bg-gray-100 text-gray-700";
     }
+    }
+
+    // API base URL — override for production deployment (e.g. Render/SnapDeploy).
+    // Leave empty for local dev (relative fetch to same origin).
+    const API_BASE = window.EXPENSEDRIFT_API_BASE || "";
 
     async function loadMetrics() {
       try {
-        const res = await fetch("/api/v1/metrics");
+        const res = await fetch(`${API_BASE}/api/v1/metrics`);
         const data = await res.json();
         document.getElementById("metric-vendors").textContent = data.vendor_count ?? 0;
         document.getElementById("metric-diffs").textContent = data.diff_count ?? 0;
@@ -114,7 +123,7 @@
 
     async function loadDiffs() {
       try {
-        const res = await fetch("/api/v1/diffs");
+        const res = await fetch(`${API_BASE}/api/v1/diffs`);
         const data = await res.json();
         const diffs = data.diffs || [];
         const tbody = document.getElementById("diffs-table-body");
@@ -151,7 +160,7 @@
 
     async function ackDiff(diffId) {
       try {
-        const res = await fetch(`/api/v1/diffs/${diffId}/ack`, { method: "POST" });
+        const res = await fetch(`${API_BASE}/api/v1/diffs/${diffId}/ack`, { method: "POST" });
         if (res.ok) {
           loadDiffs();
           loadMetrics();
