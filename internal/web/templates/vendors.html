@@ -1,4 +1,3 @@
-{{define "vendors"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,7 +32,7 @@
       </div>
     </div>
 
-    <div class="bg-white p-6 rounded shadow border border-gray-200" hx-get="/api/v1/vendors" hx-trigger="load">
+    <div class="bg-white p-6 rounded shadow border border-gray-200">
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="border-b border-gray-200">
@@ -44,12 +43,45 @@
             <th class="pb-2 text-gray-600 text-sm">Status</th>
           </tr>
         </thead>
-        <tbody id="vendors-table-body">
-        </tbody>
+        <tbody id="vendors-table-body"></tbody>
       </table>
       <p id="vendors-empty" class="py-4 text-gray-500 text-center hidden">No vendors found.</p>
     </div>
   </div>
+
+  <script>
+    async function loadVendors() {
+      try {
+        const res = await fetch("/api/v1/vendors");
+        const data = await res.json();
+        const vendors = data.vendors || [];
+        const tbody = document.getElementById("vendors-table-body");
+        const empty = document.getElementById("vendors-empty");
+
+        if (vendors.length === 0) {
+          empty.classList.remove("hidden");
+          tbody.innerHTML = "";
+          return;
+        }
+
+        empty.classList.add("hidden");
+        tbody.innerHTML = vendors.map(v => `
+          <tr class="border-b border-gray-100 hover:bg-gray-50">
+            <td class="py-2">${v.id}</td>
+            <td class="py-2">${v.name}</td>
+            <td class="py-2">${v.category}</td>
+            <td class="py-2"><a href="${v.homepage_url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${v.homepage_url}</a></td>
+            <td class="py-2">${v.status}</td>
+          </tr>
+        `).join("");
+      } catch (e) {
+        console.error("Failed to load vendors:", e);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadVendors();
+    });
+  </script>
 </body>
 </html>
-{{end}}

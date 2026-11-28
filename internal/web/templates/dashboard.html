@@ -1,70 +1,172 @@
-{{define "content"}}
-<div class="mb-6 flex justify-between items-start gap-4">
-  <div>
-    <h1 class="text-2xl font-bold">Dashboard</h1>
-    <p class="text-gray-600">Shadow inflation monitoring control plane</p>
-  </div>
-  <div class="flex gap-2">
-    <button hx-post="/api/v1/trigger/collect"
-            hx-target="#collect-result"
-            hx-indicator="#collect-spinner"
-            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-      Run Collection
-    </button>
-    <button hx-post="/api/v1/trigger/archive"
-            hx-target="#archive-result"
-            hx-indicator="#archive-spinner"
-            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50">
-      Archive Cold
-    </button>
-    <span id="collect-spinner" class="htmx-request hidden">…</span>
-    <span id="archive-spinner" class="htmx-request hidden">…</span>
-  </div>
-</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - ExpenseDrift Control Plane</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <link href="https://unpkg.com/@tailwindcss/browser@4"></link>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <nav class="bg-white border-b border-gray-200 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <div class="font-bold text-lg">ExpenseDrift</div>
+      <div class="flex gap-4">
+        <a href="/" class="text-blue-600 hover:text-blue-800 font-semibold">Dashboard</a>
+        <a href="/diffs" class="text-blue-600 hover:text-blue-800">Diffs</a>
+        <a href="/vendors" class="text-blue-600 hover:text-blue-800">Vendors</a>
+        <a href="/targets" class="text-blue-600 hover:text-blue-800">Targets</a>
+        <a href="/logout" class="px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">Logout</a>
+      </div>
+    </div>
+  </nav>
 
-<div id="collect-result" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-700 hidden"></div>
-<div id="archive-result" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-700 hidden"></div>
+  <div class="max-w-7xl mx-auto py-6 px-4">
+    <div class="mb-6 flex justify-between items-start gap-4">
+      <div>
+        <h1 class="text-2xl font-bold">Dashboard</h1>
+        <p class="text-gray-600">Shadow inflation monitoring control plane</p>
+      </div>
+      <div class="flex gap-2">
+        <button hx-post="/api/v1/trigger/collect"
+                hx-target="#collect-result"
+                hx-indicator="#collect-spinner"
+                class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
+          Run Collection
+        </button>
+        <button hx-post="/api/v1/trigger/archive"
+                hx-target="#archive-result"
+                hx-indicator="#archive-spinner"
+                class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50">
+          Archive Cold
+        </button>
+        <span id="collect-spinner" class="htmx-request hidden">…</span>
+        <span id="archive-spinner" class="htmx-request hidden">…</span>
+      </div>
+    </div>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-  <div class="bg-white p-4 rounded border border-gray-200">
-    <h3 class="font-semibold mb-2">Vendors</h3>
-    <p class="text-2xl font-bold">{{.VendorCount}}</p>
-    <p class="text-gray-500 text-sm">Monitored SaaS vendors</p>
-  </div>
-  <div class="bg-white p-4 rounded border border-gray-200">
-    <h3 class="font-semibold mb-2">Diffs</h3>
-    <p class="text-2xl font-bold text-red-600">{{.DiffCount}}</p>
-    <p class="text-gray-500 text-sm">Detected shadow inflation</p>
-  </div>
-  <div class="bg-white p-4 rounded border border-gray-200">
-    <h3 class="font-semibold mb-2">Snapshots</h3>
-    <p class="text-2xl font-bold">{{.SnapshotCount}}</p>
-    <p class="text-gray-500 text-sm">Canonical rule sets captured</p>
-  </div>
-</div>
+    <div id="collect-result" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-700 hidden"></div>
+    <div id="archive-result" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-700 hidden"></div>
 
-<div class="mt-8">
-  <h3 class="font-semibold mb-4">Recent Diffs</h3>
-  <div class="overflow-x-auto">
-    <table class="w-full text-left border-collapse">
-      <thead>
-        <tr class="border-b border-gray-200">
-          <th class="pb-2 text-gray-600 text-sm">Vendor</th>
-          <th class="pb-2 text-gray-600 text-sm">Type</th>
-          <th class="pb-2 text-gray-600 text-sm">Severity</th>
-          <th class="pb-2 text-gray-600 text-sm">Summary</th>
-          <th class="pb-2 text-gray-600 text-sm">Acknowledged</th>
-          <th class="pb-2 text-gray-600 text-sm">Action</th>
-        </tr>
-      </thead>
-      <tbody id="diffs-table-body" hx-get="/api/v1/diffs/fragment" hx-trigger="load">
-      </tbody>
-    </table>
-    <p id="diffs-empty" class="py-4 text-gray-500 text-center hidden">No diffs detected yet.</p>
-  </div>
-</div>
-{{end}}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-white p-4 rounded border border-gray-200">
+        <h3 class="font-semibold mb-2">Vendors</h3>
+        <p class="text-2xl font-bold" id="metric-vendors">–</p>
+        <p class="text-gray-500 text-sm">Monitored SaaS vendors</p>
+      </div>
+      <div class="bg-white p-4 rounded border border-gray-200">
+        <h3 class="font-semibold mb-2">Diffs</h3>
+        <p class="text-2xl font-bold text-red-600" id="metric-diffs">–</p>
+        <p class="text-gray-500 text-sm">Detected shadow inflation</p>
+      </div>
+      <div class="bg-white p-4 rounded border border-gray-200">
+        <h3 class="font-semibold mb-2">Snapshots</h3>
+        <p class="text-2xl font-bold" id="metric-snapshots">–</p>
+        <p class="text-gray-500 text-sm">Canonical rule sets captured</p>
+      </div>
+    </div>
 
-{{define "severityColor"}}
-{{if eq . 5}}bg-red-100 text-red-700{{else if eq . 4}}bg-orange-100 text-orange-700{{else if eq . 3}}bg-yellow-100 text-yellow-700{{else}}bg-gray-100 text-gray-700{{end}}
-{{end}}
+    <div class="mt-8">
+      <h3 class="font-semibold mb-4">Recent Diffs</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-gray-200">
+              <th class="pb-2 text-gray-600 text-sm">Vendor</th>
+              <th class="pb-2 text-gray-600 text-sm">Type</th>
+              <th class="pb-2 text-gray-600 text-sm">Severity</th>
+              <th class="pb-2 text-gray-600 text-sm">Summary</th>
+              <th class="pb-2 text-gray-600 text-sm">Acknowledged</th>
+              <th class="pb-2 text-gray-600 text-sm">Action</th>
+            </tr>
+          </thead>
+          <tbody id="diffs-table-body"></tbody>
+        </table>
+        <p id="diffs-empty" class="py-4 text-gray-500 text-center hidden">No diffs detected yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function severityColor(sev) {
+      switch (sev) {
+        case 5: return "bg-red-100 text-red-700";
+        case 4: return "bg-orange-100 text-orange-700";
+        case 3: return "bg-yellow-100 text-yellow-700";
+        default: return "bg-gray-100 text-gray-700";
+      }
+    }
+
+    async function loadMetrics() {
+      try {
+        const res = await fetch("/api/v1/metrics");
+        const data = await res.json();
+        document.getElementById("metric-vendors").textContent = data.vendor_count ?? 0;
+        document.getElementById("metric-diffs").textContent = data.diff_count ?? 0;
+        document.getElementById("metric-snapshots").textContent = data.snapshot_count ?? 0;
+      } catch (e) {
+        console.error("Failed to load metrics:", e);
+      }
+    }
+
+    async function loadDiffs() {
+      try {
+        const res = await fetch("/api/v1/diffs");
+        const data = await res.json();
+        const diffs = data.diffs || [];
+        const tbody = document.getElementById("diffs-table-body");
+        const empty = document.getElementById("diffs-empty");
+
+        if (diffs.length === 0) {
+          empty.classList.remove("hidden");
+          tbody.innerHTML = "";
+          return;
+        }
+
+        empty.classList.add("hidden");
+        tbody.innerHTML = diffs.map(d => {
+          const acked = d.acknowledged === 1 || d.acknowledged === true;
+          return `
+            <tr class="border-b border-gray-100 hover:bg-gray-50" id="diff-${d.id}">
+              <td class="py-2">${d.vendor_name}</td>
+              <td class="py-2">${d.drift_type}</td>
+              <td class="py-2"><span class="px-2 py-1 rounded text-xs font-bold ${severityColor(d.severity)}">${d.severity}</span></td>
+              <td class="py-2">${d.summary}</td>
+              <td class="py-2">${acked ? '<span class="text-green-600 font-semibold">Acked</span>' : '<span class="text-gray-400">Pending</span>'}</td>
+              <td class="py-2">
+                ${!acked ? `
+                  <button onclick="ackDiff('${d.id}')" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Ack</button>
+                ` : '<span class="text-xs text-green-600">✓</span>'}
+              </td>
+            </tr>
+          `;
+        }).join("");
+      } catch (e) {
+        console.error("Failed to load diffs:", e);
+      }
+    }
+
+    async function ackDiff(diffId) {
+      try {
+        const res = await fetch(`/api/v1/diffs/${diffId}/ack`, { method: "POST" });
+        if (res.ok) {
+          loadDiffs();
+          loadMetrics();
+        } else {
+          alert("Failed to acknowledge diff");
+        }
+      } catch (e) {
+        console.error("Failed to ack diff:", e);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadMetrics();
+      loadDiffs();
+    });
+  </script>
+</body>
+</html>

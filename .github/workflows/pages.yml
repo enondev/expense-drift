@@ -17,12 +17,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Build job: gather the embedded web templates as a static artifact.
-  # NOTE: These templates use Go template syntax ({{define}}, {{.VendorCount}},
-  # etc.) and require the Go backend (cmd/server) to render. Deployed as-is to
-  # GitHub Pages, they will show raw template syntax, not rendered HTML. This
-  # workflow is primarily for archival / preview purposes; the production
-  # control plane runs the compiled binary on Render/SnapDeploy per AGENTS.md.
+  # Build job: gather the static HTML/JS web UI as a deployable artifact.
+  # The templates are now pure static HTML + vanilla JS (no Go template syntax),
+  # so they render directly on GitHub Pages. Data fetching via /api/v1/* endpoints
+  # requires the compiled cmd/server binary running on Render/SnapDeploy per
+  # AGENTS.md; Pages serves the UI shell only.
   build:
     runs-on: ubuntu-latest
     steps:

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"net"
 	"net/http"
@@ -25,10 +24,16 @@ import (
 //go:embed templates/*.html
 var templateFS embed.FS
 
-// parsedTemplates holds the parsed HTML templates.
-var parsedTemplates = template.Must(template.New("layout.html").Funcs(template.FuncMap{
-	"severityColor": severityColor,
-}).ParseFS(templateFS, "templates/*.html"))
+// serveHTML serves an embedded HTML file as a static response.
+func serveHTML(w http.ResponseWriter, name string) {
+	data, err := templateFS.ReadFile("templates/" + name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
+}
 
 // session represents an authenticated user session.
 type session struct {
@@ -116,30 +121,6 @@ func NewServer(cfg storage.Config, d1 *storage.D1Client, kv *storage.KVClient, f
 	}
 }
 
-// severityColor returns a Tailwind color class for a diff severity.
-// Accepts interface{} to handle both int and float64 (D1 returns numbers as float64).
-func severityColor(sev interface{}) string {
-	var s int
-	switch v := sev.(type) {
-	case int:
-		s = v
-	case float64:
-		s = int(v)
-	default:
-		return "bg-gray-100 text-gray-700"
-	}
-	switch s {
-	case 5:
-		return "bg-red-100 text-red-700"
-	case 4:
-		return "bg-orange-100 text-orange-700"
-	case 3:
-		return "bg-yellow-100 text-yellow-700"
-	default:
-		return "bg-gray-100 text-gray-700"
-	}
-}
-
 // getEnv reads an environment variable with a default.
 func getEnv(key, def string) string {
 	if v := getEnviron(key); v != "" {
@@ -182,7 +163,6 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/targets", s.requireAuth(s.handleListTargets))
 	mux.HandleFunc("GET /api/v1/diffs", s.requireAuth(s.handleListDiffs))
 	mux.HandleFunc("GET /api/v1/metrics", s.requireAuth(s.handleListMetrics))
-	mux.HandleFunc("GET /api/v1/diffs/fragment", s.requireAuth(s.handleListDiffsFragment))
 	mux.HandleFunc("POST /api/v1/diffs/{diff_id}/ack", s.requireAuth(s.handleAckDiff))
 	mux.HandleFunc("GET /api/v1/snapshots/{target_id}/latest", s.requireAuth(s.handleLatestSnapshot))
 }
@@ -347,10 +327,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "login", map[string]any{
-		"Error": r.URL.Query().Get("error") == "1",
-	})
+	serveHTML(w, "login.html")
 }
 
 // handleLogout clears the session cookie.
@@ -371,70 +348,12 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // handleDashboard renders the control plane dashboard.
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{
-		"VendorCount":   0,
-		"DiffCount":     0,
-		"SnapshotCount": 0,
-		"RecentDiffs":   []any{},
-	}
-
-	// Vendor count
-	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM vendors`}); err == nil {
-		for _, r := range rows {
-			for _, row := range r.Results {
-				if cnt, ok := row["cnt"].(float64); ok {
-					data["VendorCount"] = int(cnt)
-				}
-			}
-		}
-	}
-
-	// Diff count
-	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM billing_diffs`}); err == nil {
-		for _, r := range rows {
-			for _, row := range r.Results {
-				if cnt, ok := row["cnt"].(float64); ok {
-					data["DiffCount"] = int(cnt)
-				}
-			}
-		}
-	}
-
-	// Snapshot count
-	if rows, err := s.d1.Query(storage.Statement{SQL: `SELECT COUNT(*) as cnt FROM snapshots`}); err == nil {
-		for _, r := range rows {
-			for _, row := range r.Results {
-				if cnt, ok := row["cnt"].(float64); ok {
-					data["SnapshotCount"] = int(cnt)
-				}
-			}
-		}
-	}
-
-	// Recent diffs (latest 5)
-	if rows, err := s.d1.Query(storage.Statement{
-		SQL: `SELECT bd.id, v.name as vendor_name, bd.drift_type, bd.severity, bd.summary,
-				  bd.acknowledged, bd.created_at
-			  FROM billing_diffs bd
-			  JOIN vendors v ON bd.vendor_id = v.id
-			  ORDER BY bd.created_at DESC
-			  LIMIT 5`,
-	}); err == nil {
-		var recent []map[string]interface{}
-		for _, r := range rows {
-			recent = append(recent, r.Results...)
-		}
-		data["RecentDiffs"] = recent
-	}
-
-	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", data)
+	serveHTML(w, "dashboard.html")
 }
 
-// handleDiffsUI renders the diffs page.
+// handleDiffsUI renders the diffs page (same static dashboard, diffs loaded client-side).
 func (s *Server) handleDiffsUI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{})
+	serveHTML(w, "dashboard.html")
 }
 
 // handleListVendors lists monitored vendors from D1.
@@ -613,38 +532,14 @@ func (s *Server) handleListMetrics(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, 200, metrics)
 }
 
-// handleListDiffsFragment returns an HTML fragment of diff table rows for HTMX.
-func (s *Server) handleListDiffsFragment(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.d1.Query(storage.Statement{
-		SQL: `SELECT bd.id, v.name as vendor_name, bd.drift_type, bd.severity, bd.summary,
-				  bd.acknowledged, bd.created_at
-			  FROM billing_diffs bd
-			  JOIN vendors v ON bd.vendor_id = v.id
-			  ORDER BY bd.created_at DESC
-			  LIMIT 50`,
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	var diffs []map[string]interface{}
-	for _, r := range rows {
-		diffs = append(diffs, r.Results...)
-	}
-	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "diffs.html", map[string]any{"Diffs": diffs})
-}
-
 // handleVendorsUI renders the vendors listing page.
 func (s *Server) handleVendorsUI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{"Page": "vendors"})
+	serveHTML(w, "vendors.html")
 }
 
 // handleTargetsUI renders the targets listing page.
 func (s *Server) handleTargetsUI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{"Page": "targets"})
+	serveHTML(w, "targets.html")
 }
 
 // handleTriggerCollect triggers a collection run.
