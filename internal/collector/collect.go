@@ -287,7 +287,10 @@ func processTarget(ctx context.Context, log *slog.Logger, d1 *storage.D1Client, 
 				log.Warn("billing drift detected", "target_id", tgt.ID, "vendor_id", tgt.VendorID,
 					"drift_type", result.DriftType, "severity", result.Severity, "summary", result.Summary)
 				if !dryRun {
-					storeBillingDiff(ctx, d1, tgt.VendorID, tgt.ID, snapshotID, result)
+					if err := storeBillingDiff(ctx, d1, tgt.VendorID, tgt.ID, snapshotID, result); err != nil {
+						log.Error("failed to store billing diff", "target_id", tgt.ID, "error", err)
+						summary.Errors++
+					}
 				}
 			}
 		}
@@ -324,7 +327,10 @@ func loadPreviousSnapshot(ctx context.Context, d1 *storage.D1Client, targetID st
 }
 
 // storeBillingDiff persists a detected billing diff to D1.
-func storeBillingDiff(ctx context.Context, d1 *storage.D1Client, vendorID, targetID, snapshotID string, result model.BillingDiffResult) {
+// from_snapshot_id is nil (SQL NULL) when there is no previous snapshot, since
+// an empty string "" would violate the foreign key constraint under
+// PRAGMA foreign_keys = ON (from_snapshot_id REFERENCES snapshots(id)).
+func storeBillingDiff(ctx context.Context, d1 *storage.D1Client, vendorID, targetID, snapshotID string, result model.BillingDiffResult) error {
 	diffID := fmt.Sprintf("diff-%d", time.Now().UnixNano())
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	patchJSON, _ := json.Marshal(result.PatchOps)
@@ -334,13 +340,14 @@ func storeBillingDiff(ctx context.Context, d1 *storage.D1Client, vendorID, targe
 		driftType = "tos_trap"
 	}
 
-	_, _ = d1.Query(storage.Statement{
+	_, err := d1.Query(storage.Statement{
 		SQL: `INSERT INTO billing_diffs (id, vendor_id, target_id, from_snapshot_id, to_snapshot_id,
 				 drift_type, severity, summary, diff_patch_json, acknowledged, created_at)
 			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
 		Params: []interface{}{
-			diffID, vendorID, targetID, "", snapshotID, driftType, result.Severity,
+			diffID, vendorID, targetID, nil, snapshotID, driftType, result.Severity,
 			result.Summary, string(patchJSON), timestamp,
 		},
 	})
+	return err
 }

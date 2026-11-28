@@ -490,11 +490,14 @@ func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
 		for i := range snapshotIDs {
 			placeholders[i] = "?"
 		}
-		_, _ = s.d1.Query(storage.Statement{
+		if _, err := s.d1.Query(storage.Statement{
 			SQL: fmt.Sprintf(`UPDATE snapshots SET archived_to_cold = 1 WHERE id IN (%s)`,
 				strings.Join(placeholders, ",")),
 			Params: snapshotIDs,
-		})
+		}); err != nil {
+			jsonResponse(w, 500, map[string]string{"error": fmt.Sprintf("failed to mark snapshots archived: %v", err)})
+			return
+		}
 	}
 
 	jsonResponse(w, 200, result)
