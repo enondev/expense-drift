@@ -38,6 +38,11 @@ jobs:
           cp internal/web/templates/*.html _site/
           cp internal/web/templates/dashboard.html _site/index.html
 
+      - name: Inject EXPENSEDRIFT_API_BASE from GitHub Actions secret/var
+        run: |
+          API_BASE="${{ secrets.EXPENSEDRIFT_API_BASE || '' }}"
+          sed -i 's|window\.EXPENSEDRIFT_API_BASE = window\.EXPENSEDRIFT_API_BASE \|\| "";|window.EXPENSEDRIFT_API_BASE = "'"$API_BASE"'";|' _site/*.html
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
