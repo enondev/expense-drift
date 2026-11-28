@@ -168,6 +168,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/trigger/archive", s.rateLimit(5, time.Minute, s.requireAuth(s.handleTriggerArchive)))
 	mux.HandleFunc("GET /api/v1/vendors", s.requireAuth(s.handleListVendors))
 	mux.HandleFunc("POST /api/v1/vendors", s.requireAuth(s.handleUpsertVendor))
+	mux.HandleFunc("GET /api/v1/targets", s.requireAuth(s.handleListTargets))
 	mux.HandleFunc("GET /api/v1/diffs", s.requireAuth(s.handleListDiffs))
 	mux.HandleFunc("POST /api/v1/diffs/{diff_id}/ack", s.requireAuth(s.handleAckDiff))
 	mux.HandleFunc("GET /api/v1/snapshots/{target_id}/latest", s.requireAuth(s.handleLatestSnapshot))
@@ -373,9 +374,48 @@ func (s *Server) handleDiffsUI(w http.ResponseWriter, r *http.Request) {
 	_ = parsedTemplates.ExecuteTemplate(w, "layout.html", map[string]any{})
 }
 
-// handleListVendors lists monitored vendors.
+// handleListVendors lists monitored vendors from D1.
 func (s *Server) handleListVendors(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, 200, map[string]any{"vendors": []any{}})
+	rows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT id, name, category, homepage_url, status, created_at
+			  FROM vendors
+			  WHERE id = id`,
+	})
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	var vendors []map[string]interface{}
+	for _, r := range rows {
+		for _, row := range r.Results {
+			vendors = append(vendors, row)
+		}
+	}
+	jsonResponse(w, 200, map[string]any{"vendors": vendors})
+}
+
+// handleListTargets lists watch targets with their next check time for observability.
+func (s *Server) handleListTargets(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	rows, err := s.d1.Query(storage.Statement{
+		SQL: `SELECT wt.id, wt.vendor_id, wt.surface_type, wt.url, wt.extract_selector,
+				 wt.fetch_tier, wt.last_checked_at, wt.next_check_at, wt.cooldown_seconds
+			  FROM watch_targets wt
+			  WHERE wt.next_check_at <= ?
+			  ORDER BY wt.next_check_at`,
+		Params: []interface{}{now},
+	})
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	var targets []map[string]interface{}
+	for _, r := range rows {
+		for _, row := range r.Results {
+			targets = append(targets, row)
+		}
+	}
+	jsonResponse(w, 200, map[string]any{"targets": targets})
 }
 
 // handleUpsertVendor registers or updates a vendor.

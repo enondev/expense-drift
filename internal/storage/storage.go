@@ -66,6 +66,8 @@ var indexedColumnNames = map[string]bool{
 	"acknowledged":       true,
 	"severity":           true,
 	"created_at":         true,
+	"status":             true,
+	"next_check_at":      true,
 }
 
 // validateSelectFilters checks that a SELECT statement filters on an indexed

@@ -48,23 +48,23 @@ func TestD1ClientWireFormatUsesStatementsKey(t *testing.T) {
 		t.Fatalf("expected Bearer auth, got %q", captured.auth)
 	}
 
-	// The wire format MUST use "statements", not "batch".
-	if !strings.Contains(captured.body, `"statements"`) {
-		t.Fatalf("expected \"statements\" key in request body, got %q", captured.body)
+	// The wire format MUST use "batch", not "statements".
+	if !strings.Contains(captured.body, `"batch"`) {
+		t.Fatalf("expected \"batch\" key in request body, got %q", captured.body)
 	}
-	if strings.Contains(captured.body, `"batch"`) {
-		t.Fatalf("request body must not contain \"batch\" key, got %q", captured.body)
+	if strings.Contains(captured.body, `"statements"`) {
+		t.Fatalf("request body must not contain \"statements\" key, got %q", captured.body)
 	}
 
 	var dqr d1QueryRequest
 	if err := json.Unmarshal([]byte(captured.body), &dqr); err != nil {
 		t.Fatalf("unmarshal d1QueryRequest: %v", err)
 	}
-	if len(dqr.Statements) != 2 {
-		t.Fatalf("expected 2 statements, got %d", len(dqr.Statements))
+	if len(dqr.Batch) != 2 {
+		t.Fatalf("expected 2 statements, got %d", len(dqr.Batch))
 	}
-	if dqr.Statements[0].SQL != "INSERT INTO snapshots (id, target_id) VALUES (?, ?)" {
-		t.Fatalf("unexpected first statement SQL: %q", dqr.Statements[0].SQL)
+	if dqr.Batch[0].SQL != "INSERT INTO snapshots (id, target_id) VALUES (?, ?)" {
+		t.Fatalf("unexpected first statement SQL: %q", dqr.Batch[0].SQL)
 	}
 }
 
